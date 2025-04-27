@@ -752,5 +752,5 @@ class StartMatch(commands.Cog):
         await ctx.send("Match has ended and all match data has been cleaned up. Thanks for playing!")
 
 
-def setup(bot):
-    bot.add_cog(StartMatch(bot))
+async def setup(bot):
+    await bot.add_cog(StartMatch(bot))
