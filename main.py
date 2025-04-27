@@ -58,7 +58,7 @@ async def load_extensions():
 # Run the bot
 async def main():
     await load_extensions()
-    TOKEN = "token_here"  # Replace with your actual bot token
+    TOKEN = "token"  # Replace with your actual bot token
     await bot.start(TOKEN)
 
 if __name__ == "__main__":
