@@ -17,11 +17,11 @@ class StartMatch(commands.Cog):
         # Check if user is authorized
         if ctx.author.id != 823178354118885388:
             return await ctx.send("Only the bot owner can use this command.")
-        
+    
         # Check if a match already exists in this channel
         if ctx.channel.id in self.bot.active_matches:
             return await ctx.send("A match is already in progress in this channel.")
-        
+
         # Create the match data structure
         match_data = {
             "host_id": 823178354118885388,  # You as host
@@ -124,21 +124,21 @@ class StartMatch(commands.Cog):
             "individual_scores": {}
         }
 
-        # Initialize individual scores
+        # Initialize individual scores (using string keys)
         for player_id in match_data['players']:
             player_id_str = str(player_id)
             match_data['individual_scores'][player_id_str] = {
                 'raids': 0,
                 'tackles': 0
             }
-    
+
         # Store the match in active_matches
         self.bot.active_matches[ctx.channel.id] = match_data
 
         # Update user_match_map
         for player_id in match_data['players']:
             self.bot.user_match_map[player_id] = ctx.channel.id
-        
+
         # Mark match as started
         match_data['has_started'] = True
         match_data['start_time'] = datetime.now()
@@ -157,7 +157,7 @@ class StartMatch(commands.Cog):
 
         embed.add_field(
             name="First Raiders", 
-                value=f"Team A will raid first\nTeam B will defend first"
+            value=f"Team A will raid first\nTeam B will defend first"
         )
 
         embed.add_field(
@@ -775,22 +775,22 @@ class StartMatch(commands.Cog):
         """Process a normal raid where raider has selected a number"""
         raiding_team_key = match['raiding_team']
         defending_team_key = "team_b" if raiding_team_key == "team_a" else "team_a"
-    
+
         raider = self.bot.get_user(raider_id)
         raider_id_str = str(raider_id)
-    
+
         # Create result embed
         result_embed = discord.Embed(
             title=f"Raid #{match['current_raid_number']} Result",
             description=f"Raider {raider.mention} chose number **{raider_number}**",
             color=discord.Color.from_rgb(255, 165, 0)
         )
-    
+
         # Count how many defenders chose each number
         defender_number_counts = {}
         for defender_id, number in defender_numbers.items():
             defender_number_counts[number] = defender_number_counts.get(number, 0) + 1
-    
+
         # List of defenders who chose the same number as raider
         matching_defenders = []
         for defender_id, number in defender_numbers.items():
@@ -798,13 +798,23 @@ class StartMatch(commands.Cog):
                 defender = self.bot.get_user(defender_id)
                 if defender:
                     matching_defenders.append(defender)
-    
+
         # Check for defenders who picked the same number (potential super raid/tackle)
         super_possibilities = {}
         for number, count in defender_number_counts.items():
             if count > 1:
                 super_possibilities[number] = count
-    
+
+        # Ensure individual_scores for raider exists
+        if raider_id_str not in match['individual_scores']:
+            match['individual_scores'][raider_id_str] = {'raids': 0, 'tackles': 0}
+
+        # Ensure individual_scores for defenders exist
+        for defender_id in defender_numbers.keys():
+            defender_id_str = str(defender_id)
+            if defender_id_str not in match['individual_scores']:
+                match['individual_scores'][defender_id_str] = {'raids': 0, 'tackles': 0}
+
         # Handle different raid outcomes
         if matching_defenders:
             # Tackle scenario - defenders caught the raider
@@ -812,7 +822,7 @@ class StartMatch(commands.Cog):
                 # Super tackle - multiple defenders caught the raider
                 points = 2
                 match['scores'][defending_team_key] += points
-            
+
                 # Update individual scores for each defender
                 for defender in matching_defenders:
                     defender_id_str = str(defender.id)
@@ -821,24 +831,24 @@ class StartMatch(commands.Cog):
                     else:
                         # Initialize if not exists
                         match['individual_scores'][defender_id_str] = {'raids': 0, 'tackles': 1}
-            
+
                 # Create defender list for display
                 defender_mentions = [defender.mention for defender in matching_defenders]
                 defender_text = ", ".join(defender_mentions)
-            
+
                 result_embed.add_field(
                     name="SUPER TACKLE!",
                     value=f"Multiple defenders ({defender_text}) guessed the raider's number!\n**+{points} points** to {match['teams'][defending_team_key]['name']}",
                     inline=False
                 )
-            
+
                 match['last_raid_result'] = f"Super Tackle! {len(matching_defenders)} defenders guessed correctly. +{points} to defending team."
 
             else:
                 # Normal tackle - one defender caught the raider
                 points = 1
                 match['scores'][defending_team_key] += points
-            
+
                 # Update individual score for the defender
                 defender_id_str = str(matching_defenders[0].id)
                 if defender_id_str in match['individual_scores']:
@@ -846,32 +856,32 @@ class StartMatch(commands.Cog):
                 else:
                     # Initialize if not exists
                     match['individual_scores'][defender_id_str] = {'raids': 0, 'tackles': 1}
-            
+
                 result_embed.add_field(
                     name="TACKLE!",
                     value=f"{matching_defenders[0].mention} guessed the raider's number!\n**+{points} point** to {match['teams'][defending_team_key]['name']}",
                     inline=False
                 )
-            
+
                 match['last_raid_result'] = f"Tackle! Defender guessed correctly. +{points} to defending team."
-            
+
         elif super_possibilities and raider_number not in super_possibilities:
             # Super raid scenario - multiple defenders chose same number, but raider chose different
             # Find the number that multiple defenders picked
             super_number = max(super_possibilities.items(), key=lambda x: x[1])[0]
             count = super_possibilities[super_number]
-        
+
             # Calculate points based on how many defenders chose the same wrong number
             points = count  # 2 for double super raid, 3 for triple
             match['scores'][raiding_team_key] += points
-        
+
             # Update individual score for raider
             if raider_id_str in match['individual_scores']:
                 match['individual_scores'][raider_id_str]['raids'] += points
             else:
                 # Initialize if not exists
                 match['individual_scores'][raider_id_str] = {'raids': points, 'tackles': 0}
-        
+
             # List defenders who fell for the super raid
             super_raid_defenders = []
             for defender_id, number in defender_numbers.items():
@@ -879,50 +889,50 @@ class StartMatch(commands.Cog):
                     defender = self.bot.get_user(defender_id)
                     if defender:
                         super_raid_defenders.append(defender.mention)
-        
+
             defender_text = ", ".join(super_raid_defenders)
-        
+
             result_embed.add_field(
                 name="SUPER RAID!",
                 value=f"Multiple defenders ({defender_text}) chose {super_number}, but raider chose {raider_number}!\n**+{points} points** to {match['teams'][raiding_team_key]['name']}",
                 inline=False
             )
-        
+
             match['last_raid_result'] = f"Super Raid! {count} defenders guessed the same wrong number. +{points} to raiding team."
-        
+
         else:
             # Escape scenario - raider escaped without being tackled
             points = 1
             match['scores'][raiding_team_key] += points
-        
+
             # Update individual score for raider
             if raider_id_str in match['individual_scores']:
                 match['individual_scores'][raider_id_str]['raids'] += points
             else:
                 # Initialize if not exists
                 match['individual_scores'][raider_id_str] = {'raids': points, 'tackles': 0}
-        
+
             result_embed.add_field(
                 name="ESCAPE!",
                 value=f"No defender guessed the raider's number!\n**+{points} point** to {match['teams'][raiding_team_key]['name']}",
                 inline=False
             )
-        
+
             match['last_raid_result'] = f"Escape! No defender guessed correctly. +{points} to raiding team."
-    
+
         # Show defender numbers for transparency
         defender_numbers_text = []
         for defender_id, number in defender_numbers.items():
             defender = self.bot.get_user(defender_id)
             if defender:
                 defender_numbers_text.append(f"{defender.name}: {number}")
-    
+
         result_embed.add_field(
             name="Defender Numbers",
             value="\n".join(defender_numbers_text) if defender_numbers_text else "No defenders responded",
             inline=False
         )
-    
+
         # Show current scores
         result_embed.add_field(
             name="Current Score",
@@ -935,7 +945,7 @@ class StartMatch(commands.Cog):
     async def end_match(self, ctx, match):
         team_a_score = match['scores']['team_a']
         team_b_score = match['scores']['team_b']
-    
+
         # Determine winner
         if team_a_score > team_b_score:
             winner = "team_a"
@@ -943,21 +953,21 @@ class StartMatch(commands.Cog):
             winner = "team_b"
         else:
             winner = "tie"
-    
+
         # Create end match embed
         embed = discord.Embed(
             title="🏆 Kabaddi Match Complete! 🏆",
             description=f"The {match['mode'].capitalize()} match has ended after 20 raids!",
             color=discord.Color.gold()
         )
-    
+
         # Add final score
         embed.add_field(
             name="Final Score",
             value=f"{match['teams']['team_a']['name']}  **{team_a_score}** - **{team_b_score}**  {match['teams']['team_b']['name']}",
             inline=False
         )
-    
+
         # Add winner announcement
         if winner == "tie":
             embed.add_field(
@@ -971,7 +981,7 @@ class StartMatch(commands.Cog):
                 value=f"**{match['teams'][winner]['name']}** WINS! 🎉",
                 inline=False
             )
-    
+
         # Add match duration
         if match.get('start_time'):
             duration = datetime.now() - match['start_time']
@@ -982,9 +992,16 @@ class StartMatch(commands.Cog):
                 value=f"{minutes} minutes, {seconds} seconds",
                 inline=False
             )
-    
+
         await ctx.send(embed=embed)
-    
+
+        # Ensure all player IDs are properly stored as strings in individual_scores
+        for player_id in match['players']:
+            player_id_str = str(player_id)
+            # Initialize empty stats for players who don't have any
+            if player_id_str not in match['individual_scores']:
+                match['individual_scores'][player_id_str] = {'raids': 0, 'tackles': 0}
+
         # Find top raider and defender across both teams
         top_raider_id = None
         top_defender_id = None
@@ -995,29 +1012,43 @@ class StartMatch(commands.Cog):
         # Step 1: Find all players with highest raid/tackle points
         max_raid = max_tackle = -1
         for player_id in match['players']:
-            stats = match['individual_scores'].get(player_id, {})
+            player_id_str = str(player_id)
+            stats = match['individual_scores'].get(player_id_str, {})
             raids = stats.get('raids', 0)
             tackles = stats.get('tackles', 0)
 
             if raids > max_raid:
                 max_raid = raids
                 top_raiders = [player_id]
-            elif raids == max_raid:
+            elif raids == max_raid and raids > 0:  # Only include if they actually scored
                 top_raiders.append(player_id)
 
             if tackles > max_tackle:
                 max_tackle = tackles
                 top_defenders = [player_id]
-            elif tackles == max_tackle:
+            elif tackles == max_tackle and tackles > 0:  # Only include if they actually scored
                 top_defenders.append(player_id)
 
         # Step 2: If multiple top raiders/defenders, use total points, then team result
         def resolve_top(players):
+            if not players:  # Handle empty list case
+                return None
+
             if len(players) == 1:
                 return players[0]
 
             # Compare total points
-            totals = {pid: match['individual_scores'][pid]['raids'] + match['individual_scores'][pid]['tackles'] for pid in players}
+            totals = {}
+            for pid in players:
+                pid_str = str(pid)
+                if pid_str in match['individual_scores']:
+                    totals[pid] = match['individual_scores'][pid_str]['raids'] + match['individual_scores'][pid_str]['tackles']
+                else:
+                    totals[pid] = 0
+
+            if not totals:  # Handle case where none of the players have scores
+                return players[0]
+
             max_total = max(totals.values())
             top_total_players = [pid for pid, total in totals.items() if total == max_total]
 
@@ -1041,69 +1072,71 @@ class StartMatch(commands.Cog):
 
         top_raider_id = resolve_top(top_raiders)
         top_defender_id = resolve_top(top_defenders)
-    
+
         # Get user objects for top performers
         top_raider = self.bot.get_user(top_raider_id) if top_raider_id else None
         top_defender = self.bot.get_user(top_defender_id) if top_defender_id else None
-    
+
         # Create player stats embed
         stats_embed = discord.Embed(
             title="Player Statistics",
             description="Individual player performance",
             color=discord.Color.blue()
         )
-    
+
         # Add stats for Team A
         team_a_stats = []
         for player_id in match['teams']['team_a']['players']:
             player = self.bot.get_user(player_id)
-            if player and player_id in match['individual_scores']:
-                raids = match['individual_scores'][player_id]['raids']
-                tackles = match['individual_scores'][player_id]['tackles']
+            player_id_str = str(player_id)
+            if player and player_id_str in match['individual_scores']:
+                raids = match['individual_scores'][player_id_str]['raids']
+                tackles = match['individual_scores'][player_id_str]['tackles']
                 total = raids + tackles
-            
+
                 # Highlight the top performers in their respective teams
                 player_name = player.name
                 if player_id == top_raider_id:
                     player_name = f"{player_name} <:top_raider:1367024739910160465>"
                 elif player_id == top_defender_id:
                     player_name = f"{player_name} <:top_defender:1367026449638228030>"
-                
+
                 team_a_stats.append(f"{player_name}: {total} pts ({raids} raid, {tackles} tackle)")
-    
+
         stats_embed.add_field(
             name=f"{match['teams']['team_a']['name']} - Players Performance",
             value="\n".join(team_a_stats) if team_a_stats else "No stats",
             inline=False
         )
-    
+
         # Add stats for Team B
         team_b_stats = []
         for player_id in match['teams']['team_b']['players']:
             player = self.bot.get_user(player_id)
-            if player and player_id in match['individual_scores']:
-                raids = match['individual_scores'][player_id]['raids']
-                tackles = match['individual_scores'][player_id]['tackles']
+            player_id_str = str(player_id)
+            if player and player_id_str in match['individual_scores']:
+                raids = match['individual_scores'][player_id_str]['raids']
+                tackles = match['individual_scores'][player_id_str]['tackles']
                 total = raids + tackles
-            
+
                 # Highlight the top performers in their respective teams
                 player_name = player.name
                 if player_id == top_raider_id:
                     player_name = f"{player_name} <:top_raider:1367024739910160465>"
                 elif player_id == top_defender_id:
                     player_name = f"{player_name} <:top_defender:1367026449638228030>"
-                
+
                 team_b_stats.append(f"{player_name}: {total} pts ({raids} raid, {tackles} tackle)")
-    
+
         stats_embed.add_field(
             name=f"{match['teams']['team_b']['name']} - Players Performance",
             value="\n".join(team_b_stats) if team_b_stats else "No stats",
             inline=False
         )
-    
+
         # Send the stats embed
         await ctx.send(embed=stats_embed)
-         
+
         client = motor.motor_asyncio.AsyncIOMotorClient("mongodb+srv://yogeswar165a:yogialpha12345@marvelo.air6zj6.mongodb.net/?retryWrites=true&w=majority&appName=Marvelo")
 
         # Ping to confirm connection is alive
@@ -1119,13 +1152,23 @@ class StartMatch(commands.Cog):
 
         # Determine MVP(s)
         scores = match["individual_scores"]
-        top_score = max((v["raids"] + v["tackles"]) for v in scores.values())
-        mvp_ids = [pid for pid, data in scores.items() if (data["raids"] + data["tackles"]) == top_score]
+        player_totals = {pid: data["raids"] + data["tackles"] for pid, data in scores.items()}
+
+        if player_totals:  # Check if we have any scores at all
+            top_score = max(player_totals.values())
+            mvp_ids = [pid for pid, total in player_totals.items() if total == top_score]
+        else:
+            mvp_ids = []
 
         for player_id in match["players"]:
             pid_str = str(player_id)
-            raids = scores[player_id]["raids"]
-            tackles = scores[player_id]["tackles"]
+
+            # Make sure player has stats entry
+            if pid_str not in scores:
+                scores[pid_str] = {"raids": 0, "tackles": 0}
+
+            raids = scores[pid_str]["raids"]
+            tackles = scores[pid_str]["tackles"]
             total = raids + tackles
 
             # Determine match result
@@ -1139,7 +1182,7 @@ class StartMatch(commands.Cog):
 
             # MVP logic: give only if sole top scorer or among top but in winning team
             mvp = False
-            if player_id in mvp_ids:
+            if pid_str in mvp_ids:
                 if len(mvp_ids) == 1 or won:
                     mvp = True
 
@@ -1149,7 +1192,7 @@ class StartMatch(commands.Cog):
 
             # Build update document
             update_doc = {
-                "$inc": {
+                    "$inc": {
                     "matches": 1,
                     "wins": int(won),
                     "losses": int(not won and not tie),
@@ -1185,19 +1228,19 @@ class StartMatch(commands.Cog):
             player = self.bot.get_user(player_id)
             await ctx.send(f"✅ Updated DB for {player.name if player else pid_str}")
 
-    
+
         # Clean up match data
         channel_id = ctx.channel.id
-    
+
         # Remove all players from user_match_map
         for player_id in match['players']:
             if player_id in self.bot.__dict__["user_match_map"]:
                 del self.bot.__dict__["user_match_map"][player_id]
-    
+
         # Remove match from active_matches
         if channel_id in self.bot.__dict__["active_matches"]:
             del self.bot.__dict__["active_matches"][channel_id]
-    
+
         # Send final message
         await ctx.send("Match has ended and all match data has been cleaned up. Thanks for playing!")
 
