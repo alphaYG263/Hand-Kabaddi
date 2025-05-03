@@ -17,11 +17,11 @@ class StartMatch(commands.Cog):
         # Check if user is authorized
         if ctx.author.id != 823178354118885388:
             return await ctx.send("Only the bot owner can use this command.")
-            
+        
         # Check if a match already exists in this channel
         if ctx.channel.id in self.bot.active_matches:
             return await ctx.send("A match is already in progress in this channel.")
-            
+        
         # Create the match data structure
         match_data = {
             "host_id": 823178354118885388,  # You as host
@@ -100,7 +100,7 @@ class StartMatch(commands.Cog):
                 771985432812322828
             ],
             "players_role": {
-                # Team A roles
+                # Team A roles - making sure these are strings
                 "743318400180158544": "raider",
                 "1102092875807870986": "raider",
                 "823178354118885388": "raider",
@@ -108,7 +108,7 @@ class StartMatch(commands.Cog):
                 "861320825592348702": "defender",
                 "759713678013890560": "defender",
                 "871958885290893322": "raider",
-                # Team B roles
+                # Team B roles - making sure these are strings
                 "976718339026083911": "raider",
                 "760480907256791081": "raider",
                 "774147065592676373": "raider",
@@ -123,20 +123,22 @@ class StartMatch(commands.Cog):
             "current_raid_number": 1,
             "individual_scores": {}
         }
-    
+
         # Initialize individual scores
         for player_id in match_data['players']:
-            match_data['individual_scores'][str(player_id)] = {
+            player_id_str = str(player_id)
+            match_data['individual_scores'][player_id_str] = {
                 'raids': 0,
                 'tackles': 0
             }
+    
         # Store the match in active_matches
         self.bot.active_matches[ctx.channel.id] = match_data
 
         # Update user_match_map
         for player_id in match_data['players']:
             self.bot.user_match_map[player_id] = ctx.channel.id
-            
+        
         # Mark match as started
         match_data['has_started'] = True
         match_data['start_time'] = datetime.now()
@@ -145,31 +147,31 @@ class StartMatch(commands.Cog):
             "team_b": 0
         }
         match_data['raiding_team'] = "team_a"  # Team A chose to raid first
-    
+
         # Send starting message
         embed = discord.Embed(
             title="Custom Kabaddi Match Simulation Started!",
             description="The simulated match has begun!",
             color=discord.Color.green()
         )
-    
+
         embed.add_field(
             name="First Raiders", 
-            value=f"Team A will raid first\nTeam B will defend first"
+                value=f"Team A will raid first\nTeam B will defend first"
         )
-    
+
         embed.add_field(
             name="Total Raids", 
             value="20 (10 per team)"
         )
-    
+
         await ctx.send(embed=embed)
-    
+
         # Create and send initial scorecard
         scorecard_embed = await self.create_scorecard(match_data)
         scorecard_msg = await ctx.send(embed=scorecard_embed)
         match_data['scorecard_message_id'] = scorecard_msg.id
-    
+
         # Begin raid sequence
         await self.start_raid_sequence(ctx, match_data)
     
@@ -399,15 +401,17 @@ class StartMatch(commands.Cog):
 
                 for player_id in raiding_team['players']:
                     # Convert player_id to string when accessing players_role dictionary
-                    print("Checking raider_id:", player_id)
-                    print("Players role keys:", match.get('players_role', {}).keys())
-                    print("Role fetched:", match.get('players_role', {}).get(str(player_id)))
-                    role = match.get('players_role', {}).get(str(player_id))
+                    player_id_str = str(player_id)
+                    role = match.get('players_role', {}).get(player_id_str)
+            
+                    print(f"Checking player_id: {player_id} ({player_id_str})")
+                    print(f"Role fetched: {role}")
             
                     # Check if player role allows raiding
                     if match['mode'] == 'custom' and role not in ['raider', 'allrounder']:
+                        print(f"Skipping player {player_id} with role {role} - not a valid raider")
                         continue
-                
+            
                     player = bot.get_user(player_id)
                     if player:
                         select.add_option(
@@ -416,13 +420,14 @@ class StartMatch(commands.Cog):
                             description=f'Select {player.name} as raider'
                         )
                         valid_raiders_found = True
+                        print(f"Added player {player.name} as valid raider option")
 
                 # If no valid raiders found, add a message option
                 if not valid_raiders_found:
                     # Debug output to help diagnose
                     print(f"No valid raiders found. Player roles: {match.get('players_role')}")
                     print(f"Team players: {raiding_team['players']}")
-            
+        
                     # Add a default option to prevent API error
                     select.add_option(
                         label="Error CRS",
@@ -516,62 +521,65 @@ class StartMatch(commands.Cog):
         await self.process_raid_result(ctx, match, raider_id, raider_number, defender_numbers)
     
     async def get_player_numbers(self, ctx, match, raider, defending_team_key):
-        """Get player numbers from both raider and defenders"""
-        defenders = []
-        for player_id in match['teams'][defending_team_key]['players']:
-            print("Checking raider_id:", player_id)
-            print("Players role keys:", match.get('players_role', {}).keys())
-            print("Role fetched:", match.get('players_role', {}).get(str(player_id)))
-
-            role = match.get('players_role', {}).get(str(raider.id))
-            print("Checking raider_id:", player_id)
-            print("Players role keys:", match.get('players_role', {}).keys())
-            print("Role fetched:", match.get('players_role', {}).get(str(player_id)))
-            if match['mode'] == 'custom' and role not in ['defender', 'allrounder']:
-                continue
-            defender = self.bot.get_user(player_id)
-            if defender:
-                defenders.append(defender)
+            """Get player numbers from both raider and defenders"""
+            defenders = []
+            for player_id in match['teams'][defending_team_key]['players']:
+                player_id_str = str(player_id)
+                # Get the defender's role, not the raider's role
+                role = match.get('players_role', {}).get(player_id_str)
         
-        # Create timeout timestamp (15 seconds from now)
-        timeout_time = datetime.now() + timedelta(seconds=15)
-        discord_timestamp = f"<t:{int(timeout_time.timestamp())}:R>"
+                print(f"Checking defender_id: {player_id} ({player_id_str})")
+                print(f"Role fetched: {role}")
         
-        # Get raider number first
-        raider_number = await self.get_raider_number(raider, discord_timestamp, match['mode'])
-        
-        # If raider didn't respond in elite mode, skip defender number collection
-        if match['mode'] == 'elite' and raider_number is None:
-            return None, {}
-        
-        # Start defender number collection in parallel for all defenders
-        defender_dm_tasks = [self.get_defender_number(defender, discord_timestamp) for defender in defenders]
-        
-        # Gather all defender numbers (wait for all to complete or timeout)
-        defender_results = await asyncio.gather(*defender_dm_tasks, return_exceptions=True)
-        
-        # Process defender results
-        defender_numbers = {}
-        afk_defenders = 0
-        for i, result in enumerate(defender_results):
-            defender = defenders[i]
-            # Check if defender responded
-            if isinstance(result, Exception):
-                # Defender didn't respond in time
-                afk_defenders += 1
-                defender_numbers[defender.id] = random.randint(0, 6)
-            else:
-                # Defender responded
-                defender_numbers[defender.id] = result
-        
-        # For elite mode, handle AFK defenders by giving penalty points to raiding team
-        if match['mode'] == 'elite' and afk_defenders > 0:
-            raiding_team_key = match['raiding_team']
-            # Add penalty points to raiding team (opponent of defender team)
-            match['scores'][raiding_team_key] += afk_defenders
-            await ctx.send(f"⚠️ {afk_defenders} defender(s) didn't respond in time! {match['teams'][raiding_team_key]['name']} gets +{afk_defenders} penalty point(s)!")
-        
-        return raider_number, defender_numbers
+                # Check if player role allows defending
+                if match['mode'] == 'custom' and role not in ['defender', 'allrounder']:
+                    print(f"Skipping player {player_id} with role {role} - not a valid defender")
+                    continue
+            
+                defender = self.bot.get_user(player_id)
+                if defender:
+                    defenders.append(defender)
+                    print(f"Added {defender.name} to defenders list")
+    
+            # Create timeout timestamp (15 seconds from now)
+            timeout_time = datetime.now() + timedelta(seconds=15)
+            discord_timestamp = f"<t:{int(timeout_time.timestamp())}:R>"
+    
+            # Get raider number first
+            raider_number = await self.get_raider_number(raider, discord_timestamp, match['mode'])
+    
+            # If raider didn't respond in elite mode, skip defender number collection
+            if match['mode'] == 'elite' and raider_number is None:
+                return None, {}
+    
+            # Start defender number collection in parallel for all defenders
+            defender_dm_tasks = [self.get_defender_number(defender, discord_timestamp) for defender in defenders]
+    
+            # Gather all defender numbers (wait for all to complete or timeout)
+            defender_results = await asyncio.gather(*defender_dm_tasks, return_exceptions=True)
+    
+            # Process defender results
+            defender_numbers = {}
+            afk_defenders = 0
+            for i, result in enumerate(defender_results):
+                defender = defenders[i]
+                # Check if defender responded
+                if isinstance(result, Exception):
+                    # Defender didn't respond in time
+                    afk_defenders += 1
+                    defender_numbers[defender.id] = random.randint(0, 6)
+                else:
+                    # Defender responded
+                    defender_numbers[defender.id] = result
+    
+            # For elite mode, handle AFK defenders by giving penalty points to raiding team
+            if match['mode'] == 'elite' and afk_defenders > 0:
+                raiding_team_key = match['raiding_team']
+                # Add penalty points to raiding team (opponent of defender team)
+                match['scores'][raiding_team_key] += afk_defenders
+                await ctx.send(f"⚠️ {afk_defenders} defender(s) didn't respond in time! {match['teams'][raiding_team_key]['name']} gets +{afk_defenders} penalty point(s)!")
+    
+            return raider_number, defender_numbers
     
     async def get_raider_number(self, raider, timeout_timestamp, mode):
         """DM the raider to get their number"""
@@ -767,21 +775,22 @@ class StartMatch(commands.Cog):
         """Process a normal raid where raider has selected a number"""
         raiding_team_key = match['raiding_team']
         defending_team_key = "team_b" if raiding_team_key == "team_a" else "team_a"
-        
+    
         raider = self.bot.get_user(raider_id)
-        
+        raider_id_str = str(raider_id)
+    
         # Create result embed
         result_embed = discord.Embed(
             title=f"Raid #{match['current_raid_number']} Result",
             description=f"Raider {raider.mention} chose number **{raider_number}**",
             color=discord.Color.from_rgb(255, 165, 0)
         )
-        
+    
         # Count how many defenders chose each number
         defender_number_counts = {}
         for defender_id, number in defender_numbers.items():
             defender_number_counts[number] = defender_number_counts.get(number, 0) + 1
-        
+    
         # List of defenders who chose the same number as raider
         matching_defenders = []
         for defender_id, number in defender_numbers.items():
@@ -789,13 +798,13 @@ class StartMatch(commands.Cog):
                 defender = self.bot.get_user(defender_id)
                 if defender:
                     matching_defenders.append(defender)
-        
+    
         # Check for defenders who picked the same number (potential super raid/tackle)
         super_possibilities = {}
         for number, count in defender_number_counts.items():
             if count > 1:
                 super_possibilities[number] = count
-        
+    
         # Handle different raid outcomes
         if matching_defenders:
             # Tackle scenario - defenders caught the raider
@@ -803,52 +812,66 @@ class StartMatch(commands.Cog):
                 # Super tackle - multiple defenders caught the raider
                 points = 2
                 match['scores'][defending_team_key] += points
-                
+            
                 # Update individual scores for each defender
                 for defender in matching_defenders:
-                    match['individual_scores'][defender.id]['tackles'] += 1
-                
+                    defender_id_str = str(defender.id)
+                    if defender_id_str in match['individual_scores']:
+                        match['individual_scores'][defender_id_str]['tackles'] += 1
+                    else:
+                        # Initialize if not exists
+                        match['individual_scores'][defender_id_str] = {'raids': 0, 'tackles': 1}
+            
                 # Create defender list for display
                 defender_mentions = [defender.mention for defender in matching_defenders]
                 defender_text = ", ".join(defender_mentions)
-                
+            
                 result_embed.add_field(
                     name="SUPER TACKLE!",
                     value=f"Multiple defenders ({defender_text}) guessed the raider's number!\n**+{points} points** to {match['teams'][defending_team_key]['name']}",
                     inline=False
                 )
-                
+            
                 match['last_raid_result'] = f"Super Tackle! {len(matching_defenders)} defenders guessed correctly. +{points} to defending team."
-                
+
             else:
                 # Normal tackle - one defender caught the raider
                 points = 1
                 match['scores'][defending_team_key] += points
-                
+            
                 # Update individual score for the defender
-                match['individual_scores'][matching_defenders[0].id]['tackles'] += 1
-                
+                defender_id_str = str(matching_defenders[0].id)
+                if defender_id_str in match['individual_scores']:
+                    match['individual_scores'][defender_id_str]['tackles'] += 1
+                else:
+                    # Initialize if not exists
+                    match['individual_scores'][defender_id_str] = {'raids': 0, 'tackles': 1}
+            
                 result_embed.add_field(
                     name="TACKLE!",
                     value=f"{matching_defenders[0].mention} guessed the raider's number!\n**+{points} point** to {match['teams'][defending_team_key]['name']}",
                     inline=False
                 )
-                
+            
                 match['last_raid_result'] = f"Tackle! Defender guessed correctly. +{points} to defending team."
-                
+            
         elif super_possibilities and raider_number not in super_possibilities:
             # Super raid scenario - multiple defenders chose same number, but raider chose different
             # Find the number that multiple defenders picked
             super_number = max(super_possibilities.items(), key=lambda x: x[1])[0]
             count = super_possibilities[super_number]
-            
+        
             # Calculate points based on how many defenders chose the same wrong number
             points = count  # 2 for double super raid, 3 for triple
             match['scores'][raiding_team_key] += points
-            
+        
             # Update individual score for raider
-            match['individual_scores'][raider_id]['raids'] += points
-            
+            if raider_id_str in match['individual_scores']:
+                match['individual_scores'][raider_id_str]['raids'] += points
+            else:
+                # Initialize if not exists
+                match['individual_scores'][raider_id_str] = {'raids': points, 'tackles': 0}
+        
             # List defenders who fell for the super raid
             super_raid_defenders = []
             for defender_id, number in defender_numbers.items():
@@ -856,53 +879,57 @@ class StartMatch(commands.Cog):
                     defender = self.bot.get_user(defender_id)
                     if defender:
                         super_raid_defenders.append(defender.mention)
-            
+        
             defender_text = ", ".join(super_raid_defenders)
-            
+        
             result_embed.add_field(
                 name="SUPER RAID!",
                 value=f"Multiple defenders ({defender_text}) chose {super_number}, but raider chose {raider_number}!\n**+{points} points** to {match['teams'][raiding_team_key]['name']}",
                 inline=False
             )
-            
+        
             match['last_raid_result'] = f"Super Raid! {count} defenders guessed the same wrong number. +{points} to raiding team."
-            
+        
         else:
             # Escape scenario - raider escaped without being tackled
             points = 1
             match['scores'][raiding_team_key] += points
-            
+        
             # Update individual score for raider
-            match['individual_scores'][raider_id]['raids'] += points
-            
+            if raider_id_str in match['individual_scores']:
+                match['individual_scores'][raider_id_str]['raids'] += points
+            else:
+                # Initialize if not exists
+                match['individual_scores'][raider_id_str] = {'raids': points, 'tackles': 0}
+        
             result_embed.add_field(
                 name="ESCAPE!",
                 value=f"No defender guessed the raider's number!\n**+{points} point** to {match['teams'][raiding_team_key]['name']}",
                 inline=False
             )
-            
-            match['last_raid_result'] = f"Escape! No defender guessed correctly. +{points} to raiding team."
         
+            match['last_raid_result'] = f"Escape! No defender guessed correctly. +{points} to raiding team."
+    
         # Show defender numbers for transparency
         defender_numbers_text = []
         for defender_id, number in defender_numbers.items():
             defender = self.bot.get_user(defender_id)
             if defender:
                 defender_numbers_text.append(f"{defender.name}: {number}")
-        
+    
         result_embed.add_field(
             name="Defender Numbers",
             value="\n".join(defender_numbers_text) if defender_numbers_text else "No defenders responded",
             inline=False
         )
-        
+    
         # Show current scores
         result_embed.add_field(
             name="Current Score",
             value=f"{match['teams']['team_a']['name']}  {match['scores']['team_a']}  -  {match['scores']['team_b']}  {match['teams']['team_b']['name']}",
             inline=False
         )
-        
+
         await ctx.send(embed=result_embed)
     
     async def end_match(self, ctx, match):
